@@ -43,6 +43,8 @@ class Repository:
             "telefone": cuidador.telefone,
             "cor": cuidador.cor,
             "ativo": cuidador.ativo,
+            "pode_sabado": cuidador.pode_sabado,
+            "pode_domingo": cuidador.pode_domingo,
         })
         self._salvar()
 

@@ -334,30 +334,63 @@ if tab2 is not None:
     with tab2:
         st.markdown("### 👥 Gerenciar Cuidadores")
 
-        cuidadores = repo.listar_cuidadores()
+        # Lista COMPLETA (sem filtro)
+        todos_cuidadores = repo.listar_cuidadores()
 
-        if cuidadores:
-            for c in cuidadores:
-                col1, col2, col3 = st.columns([3, 1, 1])
+        if todos_cuidadores:
+            # Filtro (em variável separada)
+            filtro = st.radio(
+                "Mostrar",
+                ["Todos", "Ativos", "Inativos"],
+                horizontal=True
+            )
 
-                with col1:
-                    st.markdown(
-                        f'<div class="cuidador-card" style="border-left-color:{c["cor"]};">'
-                        f'<b>{c["nome"]}</b>'
-                        + (f' • 📞 {c["telefone"]}' if c.get('telefone') else '')
-                        + '</div>',
-                        unsafe_allow_html=True
-                    )
+            if filtro == "Ativos":
+                cuidadores_filtrados = [c for c in todos_cuidadores if c['ativo']]
+            elif filtro == "Inativos":
+                cuidadores_filtrados = [c for c in todos_cuidadores if not c['ativo']]
+            else:
+                cuidadores_filtrados = todos_cuidadores
 
-                with col2:
-                    st.markdown(f"**Ativo:** {'✅' if c['ativo'] else '❌'}")
+            st.markdown("---")
 
-                with col3:
-                    if st.button("🗑️", key=f"del_{c['id']}"):
-                        repo.remover_cuidador(c['id'])
-                        st.rerun()
+            if not cuidadores_filtrados:
+                st.info(f"Nenhum cuidador {filtro.lower()} encontrado.")
+            else:
+                for c in cuidadores_filtrados:
+                    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+
+                    with col1:
+                        st.markdown(
+                            f'<div class="cuidador-card" style="border-left-color:{c["cor"]};">'
+                            f'<b>{c["nome"]}</b>'
+                            + (f' • 📞 {c["telefone"]}' if c.get('telefone') else '')
+                            + '</div>',
+                            unsafe_allow_html=True
+                        )
+
+                    with col2:
+                        if c['ativo']:
+                            st.markdown("**✅ Ativo**")
+                        else:
+                            st.markdown("**❌ Inativo**")
+
+                    with col3:
+                        if c['ativo']:
+                            if st.button("Desativar", key=f"toggle_{c['id']}"):
+                                repo.atualizar_cuidador(c['id'], ativo=False)
+                                st.rerun()
+                        else:
+                            if st.button("Ativar", key=f"toggle_{c['id']}"):
+                                repo.atualizar_cuidador(c['id'], ativo=True)
+                                st.rerun()
+
+                    with col4:
+                        if st.button("🗑️", key=f"del_{c['id']}"):
+                            repo.remover_cuidador(c['id'])
+                            st.rerun()
         else:
-            st.info("Nenhum cuidador cadastrado.")
+            st.info("Nenhum cuidador cadastrado ainda.")
 
         st.markdown("---")
         st.markdown("### ➕ Adicionar Cuidador")

@@ -12,8 +12,10 @@ class Cuidador:
     id: str
     nome: str
     telefone: Optional[str] = None
-    cor: str = "#3498db"  # cor para o calendário
+    cor: str = "#3498db"
     ativo: bool = True
+    pode_sabado: bool = True
+    pode_domingo: bool = True
 
 
 @dataclass
