@@ -1,0 +1,14 @@
+cat > .gitignore << 'EOF'
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.env
+.idea/
+setup.py
+setup_escala.py
+data/*.json
+*.db
+*.sqlite3
+.streamlit/secrets.toml
+EOF
