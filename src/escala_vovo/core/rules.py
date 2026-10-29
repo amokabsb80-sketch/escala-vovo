@@ -15,13 +15,26 @@ class RegrasEscala:
 
     @classmethod
     def pode_alocar(cls, cuidador_id: str, data_alvo: date,
-                    turnos_existentes: List[Turno]) -> Tuple[bool, str]:
+                    turnos_existentes: List[Turno],
+                    cuidador: dict = None) -> Tuple[bool, str]:
         """
         Verifica se um cuidador pode ser alocado em uma data
+
+        Args:
+            cuidador_id: ID do cuidador
+            data_alvo: Data a verificar
+            turnos_existentes: Lista de turnos já cadastrados
+            cuidador: Dicionário com dados do cuidador (opcional)
 
         Returns:
             (pode_alocar, motivo)
         """
+        # 0. Verifica disponibilidade de fim de semana
+        if cuidador:
+            pode, motivo = cls.pode_trabalhar_no_dia(cuidador, data_alvo)
+            if not pode:
+                return False, motivo
+
         # 1. Verifica se já está alocado neste dia
         for turno in turnos_existentes:
             if turno.cuidador_id == cuidador_id and turno.data == data_alvo:
@@ -51,6 +64,21 @@ class RegrasEscala:
                 f"Cuidador já tem {cls.MAX_TURNOS_POR_SEMANA} "
                 f"turnos nesta semana"
             )
+
+        return True, "OK"
+
+    @classmethod
+    def pode_trabalhar_no_dia(cls, cuidador: dict, data_alvo: date) -> Tuple[bool, str]:
+        """
+        Verifica se o cuidador pode trabalhar no dia da semana
+        """
+        dia_semana = data_alvo.weekday()  # 0=seg, 5=sáb, 6=dom
+
+        if dia_semana == 5 and not cuidador.get("pode_sabado", True):
+            return False, "Cuidador não trabalha aos sábados"
+
+        if dia_semana == 6 and not cuidador.get("pode_domingo", True):
+            return False, "Cuidador não trabalha aos domingos"
 
         return True, "OK"
 

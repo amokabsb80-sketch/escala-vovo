@@ -215,116 +215,118 @@ with tab1:
     primeiro_dia = estrutura[0]['data']
     offset = primeiro_dia.weekday()
 
-    # Monta HTML do calendário
-    html = '<div class="calendario-grid">'
+    # Cabeçalho
+    dias_semana = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+    header_cols = st.columns(7)
+    for i, dia in enumerate(dias_semana):
+        with header_cols[i]:
+            st.markdown(
+                f"<div style='text-align:center; font-weight:bold; "
+                f"background:#ecf0f1; padding:8px; border-radius:6px; "
+                f"color:#2c3e50;'>{dia}</div>",
+                unsafe_allow_html=True
+            )
 
-    # Cabeçalhos
-    for dia_semana in ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]:
-        html += f'<div class="calendario-header">{dia_semana}</div>'
+    # Monta grid
+    todas_celulas = [None] * offset + estrutura
+    while len(todas_celulas) % 7 != 0:
+        todas_celulas.append(None)
 
-    # Células vazias antes do primeiro dia
-    for _ in range(offset):
-        html += '<div class="calendario-dia vazio"></div>'
+    semanas = [todas_celulas[i:i+7] for i in range(0, len(todas_celulas), 7)]
 
-    # Dias do mês
-    for dia_info in estrutura:
-        tipo = "weekend" if dia_info['is_fim_semana'] else "weekday"
+    for semana in semanas:
+        cols = st.columns(7)
 
-        html += f'<div class="calendario-dia {tipo}">'
-        html += f'<div class="calendario-numero">{dia_info["dia"]}</div>'
-        html += f'<div class="calendario-semana">{dia_info["dia_semana_curto"]}</div>'
+        for i, dia_info in enumerate(semana):
+            with cols[i]:
+                if dia_info is None:
+                    st.markdown(
+                        "<div style='min-height:120px;'></div>",
+                        unsafe_allow_html=True
+                    )
+                    continue
 
-        turnos_dia = repo.listar_turnos_por_data(dia_info['data'])
-        for t in turnos_dia:
-            cuidador = repo.buscar_cuidador(t['cuidador_id'])
-            if cuidador:
-                html += (
-                    f'<div class="calendario-turno" '
-                    f'style="background:{cuidador["cor"]};">'
-                    f'{cuidador["nome"]}</div>'
+                turnos_dia = repo.listar_turnos_por_data(dia_info['data'])
+
+                bg = "#fff5f5" if dia_info['is_fim_semana'] else "#f8fbff"
+                border = "#e74c3c" if dia_info['is_fim_semana'] else "#3498db"
+
+                # Monta HTML SEM indentação (tudo em uma linha por bloco)
+                card_html = (
+                    f'<div style="background:{bg};border-left:4px solid {border};'
+                    f'border-radius:8px;padding:8px;margin:4px 0;min-height:100px;">'
+                    f'<div style="font-weight:bold;font-size:1.1em;color:#2c3e50;">'
+                    f'{dia_info["dia"]}</div>'
+                    f'<div style="color:#7f8c8d;font-size:0.75em;margin-bottom:5px;">'
+                    f'{dia_info["dia_semana_curto"]}</div>'
                 )
 
-        html += '</div>'
-
-    html += '</div>'
-
-    st.markdown(html, unsafe_allow_html=True)
-
-    # ============================================
-    # ÁREA DE ADMINISTRAÇÃO (fora do grid)
-    # ============================================
-    if is_admin:
-        st.markdown("---")
-        st.markdown("### ➕ Adicionar Turno")
-
-        col1, col2, col3 = st.columns([2, 2, 1])
-
-        with col1:
-            dias_opcoes = {d['data_formatada']: d['data'] for d in estrutura}
-            dia_escolhido_str = st.selectbox("Dia", list(dias_opcoes.keys()))
-            dia_escolhido = dias_opcoes[dia_escolhido_str]
-
-        with col2:
-            cuidadores = repo.listar_cuidadores_ativos()
-            if cuidadores:
-                nomes = [c['nome'] for c in cuidadores]
-                cuidador_nome = st.selectbox("Cuidador", nomes)
-                cuidador_id = [c['id'] for c in cuidadores if c['nome'] == cuidador_nome][0]
-            else:
-                st.warning("Cadastre cuidadores primeiro!")
-                cuidador_id = None
-
-        with col3:
-            st.markdown("<div style='padding-top: 28px;'>", unsafe_allow_html=True)
-            if st.button("Adicionar", type="primary"):
-                if cuidador_id:
-                    turnos_model = repo.to_turnos_model()
-                    cuidador_dict = repo.buscar_cuidador(cuidador_id)
-
-                    pode, motivo = RegrasEscala.pode_alocar(
-                        cuidador_id, dia_escolhido,
-                        turnos_model, cuidador_dict
-                    )
-
-                    if pode:
-                        turno = Turno(
-                            id=str(uuid.uuid4())[:8],
-                            data=dia_escolhido,
-                            cuidador_id=cuidador_id,
+                for t in turnos_dia:
+                    cuidador = repo.buscar_cuidador(t['cuidador_id'])
+                    if cuidador:
+                        card_html += (
+                            f'<div style="background:{cuidador["cor"]};color:white;'
+                            f'border-radius:5px;padding:3px 6px;margin:2px 0;'
+                            f'font-size:0.75em;">{cuidador["nome"]}</div>'
                         )
-                        repo.adicionar_turno(turno)
-                        st.success("✅ Adicionado!")
-                        st.rerun()
-                    else:
-                        st.error(f"❌ {motivo}")
-            st.markdown("</div>", unsafe_allow_html=True)
 
-        # ============================================
-        # REMOVER TURNOS
-        # ============================================
-        st.markdown("---")
-        st.markdown("### 🗑️ Remover Turno")
+                card_html += '</div>'
+                st.markdown(card_html, unsafe_allow_html=True)
 
-        turnos_mes = [
-            t for t in repo.listar_turnos()
-            if t['data'].startswith(f"{ano}-{mes:02d}")
-        ]
+                # Botões (admin)
+                if is_admin:
+                    col_add, col_rm = st.columns(2)
 
-        if turnos_mes:
-            for t in turnos_mes:
-                cuidador = repo.buscar_cuidador(t['cuidador_id'])
-                if cuidador:
-                    data_fmt = date.fromisoformat(t['data']).strftime('%d/%m/%Y')
-                    col_a, col_b = st.columns([4, 1])
-                    with col_a:
-                        st.write(f"**{data_fmt}** — {cuidador['nome']}")
-                    with col_b:
-                        if st.button("🗑️", key=f"del_turno_{t['id']}"):
-                            repo.remover_turno(t['id'])
-                            st.rerun()
-        else:
-            st.info("Nenhum turno cadastrado neste mês.")
+                    with col_add:
+                        with st.popover("➕"):
+                            st.markdown(f"**{dia_info['data_formatada']}**")
+                            cuidadores = repo.listar_cuidadores_ativos()
+                            if cuidadores:
+                                nomes = [c['nome'] for c in cuidadores]
+                                cuidador_nome = st.selectbox(
+                                    "Cuidador", nomes,
+                                    key=f"add_{dia_info['data']}"
+                                )
+                                cuidador_id = [
+                                    c['id'] for c in cuidadores
+                                    if c['nome'] == cuidador_nome
+                                ][0]
 
+                                if st.button("Confirmar",
+                                           key=f"btn_{dia_info['data']}"):
+                                    turnos_model = repo.to_turnos_model()
+                                    cuidador_dict = repo.buscar_cuidador(cuidador_id)
+                                    pode, motivo = RegrasEscala.pode_alocar(
+                                        cuidador_id, dia_info['data'],
+                                        turnos_model, cuidador_dict
+                                    )
+                                    if pode:
+                                        turno = Turno(
+                                            id=str(uuid.uuid4())[:8],
+                                            data=dia_info['data'],
+                                            cuidador_id=cuidador_id,
+                                        )
+                                        repo.adicionar_turno(turno)
+                                        st.success("✅ Adicionado!")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"❌ {motivo}")
+                            else:
+                                st.warning("Cadastre cuidadores primeiro!")
+
+                    with col_rm:
+                        if turnos_dia:
+                            with st.popover("🗑️"):
+                                st.markdown(f"**Remover de {dia_info['data_formatada']}**")
+                                for t in turnos_dia:
+                                    cuidador = repo.buscar_cuidador(t['cuidador_id'])
+                                    if cuidador:
+                                        if st.button(
+                                            f"❌ {cuidador['nome']}",
+                                            key=f"rm_{t['id']}"
+                                        ):
+                                            repo.remover_turno(t['id'])
+                                            st.rerun()
 # ============================================
 # TAB 2: CUIDADORES (apenas admin)
 # ============================================
