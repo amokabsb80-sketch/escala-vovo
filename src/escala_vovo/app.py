@@ -9,7 +9,7 @@ import uuid
 from escala_vovo.core.models import Cuidador, Turno
 from escala_vovo.core.rules import RegrasEscala
 from escala_vovo.services.calendar_service import CalendarService
-from escala_vovo.infrastructure.repository import Repository
+from escala_vovo.infrastructure.supabase_repository import SupabaseRepository
 from escala_vovo.config.auth import (
     verificar_senha_admin, is_admin_autenticado,
     fazer_login_admin, fazer_logout_admin
@@ -30,7 +30,7 @@ st.set_page_config(
 # ============================================
 @st.cache_resource
 def get_repository():
-    return Repository("data/escala.json")
+    return SupabaseRepository()
 
 
 repo = get_repository()
