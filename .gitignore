@@ -11,4 +11,7 @@ data/*.json
 *.db
 *.sqlite3
 .streamlit/secrets.toml
-EOF
+EOFsrc/escala_vovo/data/
+src/escala_vovo/src/
+__pycache__/
+.streamlit/secrets.toml
