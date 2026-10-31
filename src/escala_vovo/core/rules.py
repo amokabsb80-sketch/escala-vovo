@@ -11,7 +11,7 @@ class RegrasEscala:
 
     # Configurações (ajuste conforme a necessidade da sua avó)
     DIAS_DESCANSO_MINIMO = 0  # dias de descanso após um turno
-    MAX_TURNOS_POR_SEMANA = 2  # máximo de turnos por semana por cuidador
+    MAX_TURNOS_POR_SEMANA = 3  # máximo de turnos por semana por cuidador
 
     @classmethod
     def pode_alocar(cls, cuidador_id: str, data_alvo: date,
