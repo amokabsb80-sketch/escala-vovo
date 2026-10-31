@@ -35,6 +35,34 @@ def get_repository():
 
 repo = get_repository()
 
+
+# ============================================
+# FUNÇÕES COM CACHE (OTIMIZAÇÃO)
+# ============================================
+@st.cache_data(ttl=30)
+def get_turnos_mes(ano: int, mes: int):
+    """Busca todos os turnos do mês de uma vez"""
+    return repo.listar_turnos_do_mes(ano, mes)
+
+
+@st.cache_data(ttl=60)
+def get_cuidadores_dict():
+    """Busca todos os cuidadores e retorna como dict {id: cuidador}"""
+    cuidadores = repo.listar_cuidadores()
+    return {c['id']: c for c in cuidadores}
+
+
+@st.cache_data(ttl=60)
+def get_cuidadores_ativos():
+    """Busca apenas cuidadores ativos"""
+    return repo.listar_cuidadores_ativos()
+
+
+def limpar_cache():
+    """Limpa todos os caches após mudanças"""
+    st.cache_data.clear()
+
+
 # ============================================
 # CSS PERSONALIZADO
 # ============================================
@@ -68,16 +96,6 @@ st.markdown("""
         border-left: 5px solid;
     }
 
-    /* ============================================
-       CALENDÁRIO - CSS GRID (ALINHAMENTO PERFEITO)
-       ============================================ */
-    .calendario-grid {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
-        gap: 6px;
-        width: 100%;
-    }
-
     .calendario-header {
         text-align: center;
         font-weight: bold;
@@ -86,53 +104,6 @@ st.markdown("""
         background: #ecf0f1;
         border-radius: 6px;
         font-size: 0.9em;
-    }
-
-    .calendario-dia {
-        min-height: 110px;
-        border-radius: 8px;
-        padding: 6px;
-        box-sizing: border-box;
-        font-size: 0.85em;
-        position: relative;
-    }
-
-    .calendario-dia.weekday {
-        background: #f8fbff;
-        border-left: 4px solid #3498db;
-    }
-
-    .calendario-dia.weekend {
-        background: #fff5f5;
-        border-left: 4px solid #e74c3c;
-    }
-
-    .calendario-dia.vazio {
-        background: transparent;
-        border: none;
-    }
-
-    .calendario-numero {
-        font-weight: bold;
-        font-size: 1.1em;
-        color: #2c3e50;
-    }
-
-    .calendario-semana {
-        color: #7f8c8d;
-        font-size: 0.75em;
-        margin-bottom: 4px;
-    }
-
-    .calendario-turno {
-        color: white;
-        border-radius: 4px;
-        padding: 2px 5px;
-        margin: 2px 0;
-        font-size: 0.75em;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -212,6 +183,18 @@ with tab1:
 
     estrutura = CalendarService.get_estrutura_mes(ano, mes)
 
+    # OTIMIZAÇÃO: busca tudo de uma vez e monta dicionários
+    turnos_mes = get_turnos_mes(ano, mes)
+    cuidadores_dict = get_cuidadores_dict()
+
+    # Agrupa turnos por data para acesso O(1)
+    turnos_por_data = {}
+    for t in turnos_mes:
+        data_str = t['data']
+        if data_str not in turnos_por_data:
+            turnos_por_data[data_str] = []
+        turnos_por_data[data_str].append(t)
+
     primeiro_dia = estrutura[0]['data']
     offset = primeiro_dia.weekday()
 
@@ -234,6 +217,9 @@ with tab1:
 
     semanas = [todas_celulas[i:i+7] for i in range(0, len(todas_celulas), 7)]
 
+    # Cuidadores ativos (para o selectbox)
+    cuidadores_ativos = get_cuidadores_ativos()
+
     for semana in semanas:
         cols = st.columns(7)
 
@@ -246,12 +232,12 @@ with tab1:
                     )
                     continue
 
-                turnos_dia = repo.listar_turnos_por_data(dia_info['data'])
+                # OTIMIZAÇÃO: acesso O(1) ao invés de consulta ao banco
+                turnos_dia = turnos_por_data.get(dia_info['data'].isoformat(), [])
 
                 bg = "#fff5f5" if dia_info['is_fim_semana'] else "#f8fbff"
                 border = "#e74c3c" if dia_info['is_fim_semana'] else "#3498db"
 
-                # Monta HTML SEM indentação (tudo em uma linha por bloco)
                 card_html = (
                     f'<div style="background:{bg};border-left:4px solid {border};'
                     f'border-radius:8px;padding:8px;margin:4px 0;min-height:100px;">'
@@ -262,7 +248,8 @@ with tab1:
                 )
 
                 for t in turnos_dia:
-                    cuidador = repo.buscar_cuidador(t['cuidador_id'])
+                    # OTIMIZAÇÃO: acesso O(1) ao invés de consulta
+                    cuidador = cuidadores_dict.get(t['cuidador_id'])
                     if cuidador:
                         card_html += (
                             f'<div style="background:{cuidador["cor"]};color:white;'
@@ -280,22 +267,21 @@ with tab1:
                     with col_add:
                         with st.popover("➕"):
                             st.markdown(f"**{dia_info['data_formatada']}**")
-                            cuidadores = repo.listar_cuidadores_ativos()
-                            if cuidadores:
-                                nomes = [c['nome'] for c in cuidadores]
+                            if cuidadores_ativos:
+                                nomes = [c['nome'] for c in cuidadores_ativos]
                                 cuidador_nome = st.selectbox(
                                     "Cuidador", nomes,
                                     key=f"add_{dia_info['data']}"
                                 )
                                 cuidador_id = [
-                                    c['id'] for c in cuidadores
+                                    c['id'] for c in cuidadores_ativos
                                     if c['nome'] == cuidador_nome
                                 ][0]
 
                                 if st.button("Confirmar",
                                            key=f"btn_{dia_info['data']}"):
                                     turnos_model = repo.to_turnos_model()
-                                    cuidador_dict = repo.buscar_cuidador(cuidador_id)
+                                    cuidador_dict = cuidadores_dict.get(cuidador_id)
                                     pode, motivo = RegrasEscala.pode_alocar(
                                         cuidador_id, dia_info['data'],
                                         turnos_model, cuidador_dict
@@ -307,6 +293,7 @@ with tab1:
                                             cuidador_id=cuidador_id,
                                         )
                                         repo.adicionar_turno(turno)
+                                        limpar_cache()
                                         st.success("✅ Adicionado!")
                                         st.rerun()
                                     else:
@@ -319,14 +306,16 @@ with tab1:
                             with st.popover("🗑️"):
                                 st.markdown(f"**Remover de {dia_info['data_formatada']}**")
                                 for t in turnos_dia:
-                                    cuidador = repo.buscar_cuidador(t['cuidador_id'])
+                                    cuidador = cuidadores_dict.get(t['cuidador_id'])
                                     if cuidador:
                                         if st.button(
                                             f"❌ {cuidador['nome']}",
                                             key=f"rm_{t['id']}"
                                         ):
                                             repo.remover_turno(t['id'])
+                                            limpar_cache()
                                             st.rerun()
+
 # ============================================
 # TAB 2: CUIDADORES (apenas admin)
 # ============================================
@@ -334,11 +323,11 @@ if tab2 is not None:
     with tab2:
         st.markdown("### 👥 Gerenciar Cuidadores")
 
-        # Lista COMPLETA (sem filtro)
-        todos_cuidadores = repo.listar_cuidadores()
+        todos_cuidadores = get_cuidadores_dict().values()
 
         if todos_cuidadores:
-            # Filtro (em variável separada)
+            todos_lista = list(todos_cuidadores)
+
             filtro = st.radio(
                 "Mostrar",
                 ["Todos", "Ativos", "Inativos"],
@@ -346,11 +335,11 @@ if tab2 is not None:
             )
 
             if filtro == "Ativos":
-                cuidadores_filtrados = [c for c in todos_cuidadores if c['ativo']]
+                cuidadores_filtrados = [c for c in todos_lista if c['ativo']]
             elif filtro == "Inativos":
-                cuidadores_filtrados = [c for c in todos_cuidadores if not c['ativo']]
+                cuidadores_filtrados = [c for c in todos_lista if not c['ativo']]
             else:
-                cuidadores_filtrados = todos_cuidadores
+                cuidadores_filtrados = todos_lista
 
             st.markdown("---")
 
@@ -379,15 +368,18 @@ if tab2 is not None:
                         if c['ativo']:
                             if st.button("Desativar", key=f"toggle_{c['id']}"):
                                 repo.atualizar_cuidador(c['id'], ativo=False)
+                                limpar_cache()
                                 st.rerun()
                         else:
                             if st.button("Ativar", key=f"toggle_{c['id']}"):
                                 repo.atualizar_cuidador(c['id'], ativo=True)
+                                limpar_cache()
                                 st.rerun()
 
                     with col4:
                         if st.button("🗑️", key=f"del_{c['id']}"):
                             repo.remover_cuidador(c['id'])
+                            limpar_cache()
                             st.rerun()
         else:
             st.info("Nenhum cuidador cadastrado ainda.")
@@ -418,6 +410,7 @@ if tab2 is not None:
                         pode_domingo=pode_domingo,
                     )
                     repo.adicionar_cuidador(novo)
+                    limpar_cache()
                     st.success(f"✅ {nome} adicionado!")
                     st.rerun()
                 else:
@@ -444,6 +437,7 @@ if tab3 is not None:
         if st.button("🗑️ Limpar TODOS os dados", type="secondary"):
             if st.checkbox("Confirmo que quero apagar tudo"):
                 repo.limpar_tudo()
+                limpar_cache()
                 st.success("Dados apagados!")
                 st.rerun()
 

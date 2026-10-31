@@ -152,3 +152,20 @@ class SupabaseRepository:
             "cuidadores_ativos": len(self.listar_cuidadores_ativos()),
             "total_turnos": len(self.listar_turnos()),
         }
+
+    def listar_turnos_do_mes(self, ano: int, mes: int) -> List[Dict]:
+        """Busca todos os turnos de um mês de uma vez (OTIMIZAÇÃO)"""
+        from calendar import monthrange
+
+        inicio = f"{ano}-{mes:02d}-01"
+        ultimo_dia = monthrange(ano, mes)[1]
+        fim = f"{ano}-{mes:02d}-{ultimo_dia:02d}"
+
+        response = (
+            self.conn.table("turnos")
+            .select("*")
+            .gte("data", inicio)
+            .lte("data", fim)
+            .execute()
+        )
+        return response.data if response.data else []
